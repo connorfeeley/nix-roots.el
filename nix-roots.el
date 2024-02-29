@@ -189,15 +189,7 @@
                              (when (string= (car entry) (car root))
                                (setf (cadr entry) (vector (car root) store size))))
                            (tabulated-list-print t)))))
-           (error-callback (lambda (process output)
-                       (let () ; Updated this line
-                         (log-nix-query-result (car root) size)
-                         (message "Got error from nix path-info --size for root %s" (car root))
-                         (with-current-buffer "*Nix Roots*"
-                           (dolist (entry tabulated-list-entries)
-                             (when (string= (car entry) (car root))
-                               (setf (cadr entry) (vector (car root) store size))))
-                           (tabulated-list-print t))))))
+           )
       (let ((query-process
              (let ((process-connection-type nil)) ;; Use pipes instead of ptys
                (make-process :name "nix-store-query-size"
@@ -211,11 +203,22 @@
                                              (nix-query-process-next)))))))))
         (cl-incf nix-query-running-count))))
 
+(defun nix-query-size-sort (entry1 entry2)
+  "Custom sort function for the Size column in tabulated-list-entries."
+  ;; Element 2 of the vector represents the Size field.
+  ;; We use string-to-number to correctly sort by Size value instead of lexicographically.
+  (let ((size1 (string-to-number (aref (cadr entry1) 2)))
+        (size2 (string-to-number (aref (cadr entry2) 2))))
+    (< size1 size2)))
+
 (defun nix-roots-to-buffer (matrix)
   "Show the results as a `tabulated-list-mode' buffer."
   (switch-to-buffer "*Nix Roots*")
   (tabulated-list-mode)
-  (setq tabulated-list-format [("Root" 120 nil) ("Store" 150 nil) ("Size" 50 nil)])
+  (setq tabulated-list-format
+        [("Root" 120 nil)
+         ("Store" 150 nil)
+         ("Size" 50 nix-query-size-sort)]) ; We replace `nil` with our custom sort function.
   (setq nix-query-queue (mapcar (lambda (row)
                                   (list (car row) (nth 1 row)))
                                 matrix))
