@@ -52,8 +52,8 @@
          )
 
     ;; Don't include the "Process <name> finished" messages
-    (set-process-sentinel process (lambda (process event) (message "Process %s has terminated: %s" process event)))
-    ;; (set-process-sentinel stderr-process (lambda (process event) (message "Process %s has terminated: %s" process event)))
+    ;; (set-process-sentinel process (lambda (process event) (message "Process %s has terminated: %s" process event)))
+    (set-process-sentinel stderr-process (lambda (process event) (message "Process %s has terminated: %s" process event)))
 
     (message "Sending input")
     (with-current-buffer stdout (process-send-region process (point-min) (point-max)))
@@ -139,24 +139,80 @@
             lines)))
     roots))
 
+(defun nix-roots-filter-matrix (matrix)
+  "Filter out undesired source locations in the matrix."
+  (let ((filtered-matrix ()))
+    (dolist (row matrix)
+      (unless (or (string-match "{lsof}" (nth 0 row))
+                  (string-match "/run" (nth 0 row)))
+        (add-to-list 'filtered-matrix row)))
+    filtered-matrix))
+
+
 ;; Convert the matrix results into a read-only tabulated-list-mode buffer
+
+;; Logging function for asynchronous query results
+(defun log-nix-query-result (root size)
+  "Log the root and its corresponding size to the *Nix Query Log* buffer."
+  (with-current-buffer (get-buffer-create "*Nix Query Log*")
+    ;; Make sure we're at the end of the buffer to insert new log entry
+    (goto-char (point-max))
+    ;; Insert formatted log entry
+    (insert (format "[%s] Root: %s, Size: %s\n"
+                    (format-time-string "%Y-%m-%d %H:%M:%S")
+                    root size))
+    ;; If the buffer is displayed, refresh its window
+    (let ((win (get-buffer-window (current-buffer) 'visible)))
+      (when win (with-selected-window win (recenter -1))))))
+
+
+
+(defvar nix-query-queue '() "Queue holding roots yet to be processed.")
+(defvar nix-query-parallel-limit 8 "Maximum number of parallel nix queries.")
+(defvar nix-query-running-count 0 "Number of currently running nix queries.")
+
+(defun nix-query-process-next ()
+  "Process the next entry in the nix-query-queue if below the limit."
+  (while (and (< nix-query-running-count nix-query-parallel-limit)
+              nix-query-queue)
+    (let* ((root (pop nix-query-queue))
+           (store (nth 1 root))
+           (callback (lambda (process output)
+                       (string-match "^\\(.*?\\) +\\(.*?\\)$" output) ; Updated this line
+                       (let ((size (match-string 2 output))) ; Updated this line
+                         (log-nix-query-result (car root) size)
+                         (with-current-buffer "*Nix Roots*"
+                           (dolist (entry tabulated-list-entries)
+                             (when (string= (car entry) (car root))
+                               (setf (cadr entry) (vector (car root) store size))))
+                           (tabulated-list-print t))))))
+      (let ((query-process
+             (let ((process-connection-type nil)) ;; Use pipes instead of ptys
+               (make-process :name "nix-store-query-size"
+                             :buffer (generate-new-buffer "*") ;; change here
+                             :command (list "nix" "path-info" "--size" (car root))
+                             :sentinel (lambda (process signal)
+                                         (when (memq (process-status process) '(exit signal))
+                                           (progn
+                                             (funcall callback process (with-current-buffer (process-buffer process) (buffer-string)))
+                                             (cl-decf nix-query-running-count)
+                                             (nix-query-process-next)))))))))
+        (cl-incf nix-query-running-count))))
+
 (defun nix-roots-to-buffer (matrix)
   "Show the results as a `tabulated-list-mode' buffer."
-  ;; create a new buffer (or switch to it if it already exists)
   (switch-to-buffer "*Nix Roots*")
-  ;; enable `tabulated-list-mode' for this buffer
   (tabulated-list-mode)
-  ;; set the format of the table
-  (setq tabulated-list-format [("Root" 120 nil) ("Store" 120 nil)])
-  ;; convert the matrix to the format required by `tabulated-list-mode`
+  (setq tabulated-list-format [("Root" 120 nil) ("Store" 150 nil) ("Size" 50 nil)])
+  (setq nix-query-queue (mapcar (lambda (row)
+                                  (list (car row) (nth 1 row)))
+                                matrix))
+  (setq nix-query-running-count 0)
   (setq tabulated-list-entries
         (mapcar (lambda (row)
-                  (list (car row)
-                        (vconcat (mapcar 'identity row))))
+                  (list (car row) (vector (car row) (nth 1 row) "Fetching...")))
                 matrix))
-  ;; generate the table
+  (nix-query-process-next)
   (tabulated-list-init-header)
-  ;; make the buffer read-only
   (setq buffer-read-only t)
-  ;; update the contents of the buffer
   (tabulated-list-print))
