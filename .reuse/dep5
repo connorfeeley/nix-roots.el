@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: nix-roots.el
+Upstream-Contact: Connor Feeley <git@cfeeley.org>
+Source: https://github.com/connorfeeley/nix-roots.el
+
+Files: nix-roots.el README.org
+Copyright: 2024 Connor Feeley <git@cfeeley.org>
+License: BSD-3-Clause
