@@ -1,0 +1,7 @@
+#+title: README
+#+author: Connor Feeley
+#+date: 2024-02-29
+* NOTE: Work-in-progress
+/This package was hacked together in a couple hours./
+* Overview
+A simple Emacs package to query stray [[https://nixos.org/manual/nix/stable/][Nix]] garbage-collector roots and list them along with their closure's sizes in a ~tabulated-list-mode~ buffer.
