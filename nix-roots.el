@@ -179,8 +179,20 @@
            (store (nth 1 root))
            (callback (lambda (process output)
                        (string-match "^\\(.*?\\) +\\(.*?\\)$" output) ; Updated this line
-                       (let ((size (match-string 2 output))) ; Updated this line
+                       (let ((size
+                              (if (zerop (process-exit-status process))
+                                  (match-string 2 output)
+                                "!")))
                          (log-nix-query-result (car root) size)
+                         (with-current-buffer "*Nix Roots*"
+                           (dolist (entry tabulated-list-entries)
+                             (when (string= (car entry) (car root))
+                               (setf (cadr entry) (vector (car root) store size))))
+                           (tabulated-list-print t)))))
+           (error-callback (lambda (process output)
+                       (let () ; Updated this line
+                         (log-nix-query-result (car root) size)
+                         (message "Got error from nix path-info --size for root %s" (car root))
                          (with-current-buffer "*Nix Roots*"
                            (dolist (entry tabulated-list-entries)
                              (when (string= (car entry) (car root))
@@ -189,7 +201,7 @@
       (let ((query-process
              (let ((process-connection-type nil)) ;; Use pipes instead of ptys
                (make-process :name "nix-store-query-size"
-                             :buffer (generate-new-buffer "*") ;; change here
+                             :buffer (generate-new-buffer "*")
                              :command (list "nix" "path-info" "--size" (car root))
                              :sentinel (lambda (process signal)
                                          (when (memq (process-status process) '(exit signal))
