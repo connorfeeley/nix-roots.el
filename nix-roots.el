@@ -95,7 +95,7 @@
 
 (defun nix-roots--output-to-text (matrix)
   "Convert MATRIX of strings to a text representation."
-        (s-join "\n" (--map (s-join " " it) matrix))
+  (s-join "\n" (--map (s-join " " it) matrix))
   )
 
 (defun nix-roots--output-to-matrix (output)
@@ -103,5 +103,60 @@
   (--map (s-split " " it) (s-lines (s-chomp output))))
 
 
+;; (nix-roots--matrix-to-pairs matrix)
+(defun nix-roots--matrix-to-pairs (matrix)
+  ""
+  (mapcar (lambda (arg) (list (nth 0 arg) (nth 2 arg))) matrix)
+  )
+
+
+;; One line:
+;; (nix-roots--output-to-text (list (car matrix)))
+;; Get first of each element:
+;; (mapcar #'car matrix)
+
 (provide 'nix-roots)
 ;;; nix-roots.el ends here
+
+;; Run 'nix-store --gc --print-roots' to get list of stray roots.
+;; Each line is in the format:
+;; ROOT_LOCATION -> STORE_LOCATION
+(defun nix-roots-query ()
+  "Query nix store for stray roots."
+  (shell-command-to-string "nix-store --gc --print-roots"))
+
+;; Transform the output of `nix-roots-query' into a list of lists.
+;; Result should be in form:
+;; '((ROOT_LOCATION STORE_LOCATION) (ROOT_LOCATION STORE_LOCATION) ...)
+
+(defun nix-roots-to-matrix (output)
+  "Convert command output to list of lists."
+  (let* ((lines (split-string output "\n" t))  ;; split the output into lines
+         (roots
+           (mapcar
+             (lambda (line)
+               (split-string line " -> " t))  ;; split each line into two parts at " -> "
+            lines)))
+    roots))
+
+;; Convert the matrix results into a read-only tabulated-list-mode buffer
+(defun nix-roots-to-buffer (matrix)
+  "Show the results as a `tabulated-list-mode' buffer."
+  ;; create a new buffer (or switch to it if it already exists)
+  (switch-to-buffer "*Nix Roots*")
+  ;; enable `tabulated-list-mode' for this buffer
+  (tabulated-list-mode)
+  ;; set the format of the table
+  (setq tabulated-list-format [("Root" 120 nil) ("Store" 120 nil)])
+  ;; convert the matrix to the format required by `tabulated-list-mode`
+  (setq tabulated-list-entries
+        (mapcar (lambda (row)
+                  (list (car row)
+                        (vconcat (mapcar 'identity row))))
+                matrix))
+  ;; generate the table
+  (tabulated-list-init-header)
+  ;; make the buffer read-only
+  (setq buffer-read-only t)
+  ;; update the contents of the buffer
+  (tabulated-list-print))
