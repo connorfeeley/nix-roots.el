@@ -47,7 +47,7 @@
   (shell-command-to-string "nix-store --gc --print-roots"))
 
 (defun nix-roots-to-matrix (output)
-  "Convert command output to list of lists."
+  "Convert command OUTPUT to list of lists."
   (let* ((lines (split-string output "\n" t))  ;; split the output into lines
          (roots
           (mapcar
@@ -57,7 +57,7 @@
     roots))
 
 (defun nix-roots-filter-matrix (matrix)
-  "Filter out undesired source locations in the matrix."
+  "Filter out undesired source locations in the output MATRIX."
   (let ((filtered-matrix ()))
     (dolist (row matrix)
       (unless (or (string-match "{lsof}" (nth 0 row))
@@ -67,7 +67,7 @@
 
 ;; Logging function for asynchronous query results
 (defun nix-roots-log-query-result (root size)
-  "Log the root and its corresponding size to the *Nix Query Log* buffer."
+  "Log the ROOT and its corresponding SIZE to the *Nix Query Log* buffer."
   (with-current-buffer (get-buffer-create "*Nix Query Log*")
     ;; Make sure we're at the end of the buffer to insert new log entry
     (goto-char (point-max))
@@ -112,7 +112,8 @@
       (cl-incf nix-roots-query-running-count))))
 
 (defun nix-roots-query-size-sort (entry1 entry2)
-  "Custom sort function for the Size column in tabulated-list-entries."
+  "Custom sort function for the Size column in `tabulated-list-entries'.
+Compares the Size field of ENTRY1 and ENTRY2."
   ;; Element 2 of the vector represents the Size field.
   ;; We use string-to-number to correctly sort by Size value instead of lexicographically.
   (let ((size1 (string-to-number (aref (cadr entry1) 2)))
@@ -120,7 +121,7 @@
     (< size1 size2)))
 
 (defun nix-roots-to-buffer (matrix)
-  "Show the results as a `tabulated-list-mode' buffer."
+  "Show the results MATRIX as a `tabulated-list-mode' buffer."
   (switch-to-buffer "*Nix Roots*")
   (tabulated-list-mode)
   (setq tabulated-list-format
